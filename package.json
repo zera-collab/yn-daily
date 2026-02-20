@@ -9,14 +9,14 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@sparticuz/chromium": "132.0.0",
+    "@sparticuz/chromium": "143.0.4",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.97.0",
     "date-fns": "^4.1.0",
     "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.7",
     "next": "16.1.6",
-    "puppeteer-core": "23.11.1",
+    "puppeteer-core": "24.37.5",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
