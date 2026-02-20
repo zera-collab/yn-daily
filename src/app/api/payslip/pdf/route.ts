@@ -263,7 +263,7 @@ export async function GET(request: NextRequest) {
 
         // 4. Puppeteer で PDF 生成
         // Vercel環境での日本語フォント対応（ローカル配置のフォントを使用）
-        await chromium.font(
+        await (chromium as any).font(
             path.join(process.cwd(), 'public/fonts/NotoSansJP-VariableFont_wght.ttf')
         );
 
