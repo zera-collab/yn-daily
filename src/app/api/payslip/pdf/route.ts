@@ -271,7 +271,13 @@ export async function GET(request: NextRequest) {
         chromium.setGraphicsMode = false;
 
         const browser = await puppeteer.launch({
-            args: chromium.args,
+            args: [
+                ...chromium.args,
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+            ],
             defaultViewport: chromium.defaultViewport,
             executablePath: await chromium.executablePath(),
             headless: chromium.headless,
