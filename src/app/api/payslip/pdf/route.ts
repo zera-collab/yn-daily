@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import chromium from '@sparticuz/chromium';
+import puppeteer from 'puppeteer-core';
 
-// サーバーレス環境での Puppeteer の動作設定
-let chrome: any;
-let puppeteer: any;
-
-if (process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL) {
-    // Vercel / Lambda
-    chrome = require('@sparticuz/chromium');
-    puppeteer = require('puppeteer-core');
-} else {
-    // Local
-    puppeteer = require('puppeteer');
-}
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
@@ -270,19 +262,12 @@ export async function GET(request: NextRequest) {
         `;
 
         // 4. Puppeteer で PDF 生成
-        let browser;
-        if (chrome) {
-            browser = await puppeteer.launch({
-                args: chrome.args,
-                defaultViewport: chrome.defaultViewport,
-                executablePath: await chrome.executablePath(),
-                headless: chrome.headless,
-            });
-        } else {
-            browser = await puppeteer.launch({
-                headless: "new"
-            });
-        }
+        const browser = await puppeteer.launch({
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: chromium.headless,
+        });
 
         const page = await browser.newPage();
         await page.setContent(html, { waitUntil: 'networkidle0' });
@@ -290,14 +275,14 @@ export async function GET(request: NextRequest) {
         const pdfBuffer = await page.pdf({
             format: 'A4',
             printBackground: true,
-            margin: { top: '0', right: '0', bottom: '0', left: '0' }
+            margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' }
         });
 
         await browser.close();
 
         const safeName = encodeURIComponent(`報酬明細_${user.name}_${month}.pdf`);
 
-        return new NextResponse(pdfBuffer, {
+        return new NextResponse(pdfBuffer as any, {
             headers: {
                 'Content-Type': 'application/pdf',
                 'Content-Disposition': `attachment; filename*=UTF-8''${safeName}`,
