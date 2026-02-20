@@ -262,8 +262,11 @@ export async function GET(request: NextRequest) {
         `;
 
         // 4. Puppeteer で PDF 生成
+        // Vercel環境での日本語フォント対応
+        await chromium.font('https://raw.githack.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSansJP/NotoSansJP-Regular.ttf');
+
         const browser = await puppeteer.launch({
-            args: chromium.args,
+            args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
             defaultViewport: chromium.defaultViewport,
             executablePath: await chromium.executablePath(),
             headless: chromium.headless,

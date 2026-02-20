@@ -15,8 +15,8 @@
     "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.7",
     "next": "16.1.6",
-    "puppeteer-core": "^24.37.4",
-    "@sparticuz/chromium": "^123.0.1",
+    "puppeteer-core": "23.6.0",
+    "@sparticuz/chromium": "131.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
