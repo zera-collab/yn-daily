@@ -267,10 +267,18 @@ export async function GET(request: NextRequest) {
             path.join(process.cwd(), 'public/fonts/NotoSansJP-VariableFont_wght.ttf')
         );
 
+        const executablePath = await chromium.executablePath();
+
         const browser = await puppeteer.launch({
-            args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
+            args: [
+                ...chromium.args,
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+            ],
             defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
+            executablePath,
             headless: chromium.headless,
         });
 
