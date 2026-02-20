@@ -280,7 +280,7 @@ export async function GET(request: NextRequest) {
             ],
             defaultViewport: chromium.defaultViewport,
             executablePath: await chromium.executablePath(),
-            headless: chromium.headless,
+            headless: chromium.headless as any,
         });
 
         const page = await browser.newPage();
