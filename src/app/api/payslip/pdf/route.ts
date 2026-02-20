@@ -267,18 +267,13 @@ export async function GET(request: NextRequest) {
             path.join(process.cwd(), 'public/fonts/NotoSansJP-VariableFont_wght.ttf')
         );
 
-        const executablePath = await chromium.executablePath();
+        // Vercel AL2023 / Serverless 環境向けの最適化
+        chromium.setGraphicsMode = false;
 
         const browser = await puppeteer.launch({
-            args: [
-                ...chromium.args,
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-            ],
+            args: chromium.args,
             defaultViewport: chromium.defaultViewport,
-            executablePath,
+            executablePath: await chromium.executablePath(),
             headless: chromium.headless,
         });
 
