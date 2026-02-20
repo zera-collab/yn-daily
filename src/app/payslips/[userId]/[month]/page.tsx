@@ -57,7 +57,7 @@ export default async function PrintablePayslipPage({
         monthLabel: `${month.replace("-", "年")}月分`,
         payerName: user.companies?.name || "(法人未設定)",
         payerAddress: user.companies?.address || "",
-        recipientName: `${user.name} 業務委託`,
+        recipientName: `${user.name} 様`,
         lines: [
             { label: "運営業務料", value: totalBasePay },
             { label: "調整費 (±)", value: adjust },
