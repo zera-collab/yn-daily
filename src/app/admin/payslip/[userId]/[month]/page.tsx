@@ -22,7 +22,6 @@ export default function AdminPayslipPage() {
     const [note, setNote] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [downloading, setDownloading] = useState(false);
 
     useEffect(() => { fetchData(); }, []);
 
@@ -132,23 +131,6 @@ export default function AdminPayslipPage() {
         // Payslip の更新であればローカルStateとの同期だけで完結する。
     };
 
-    const handleDownloadPDF = async () => {
-        setDownloading(true);
-        try {
-            const res = await fetch(`/api/payslip/pdf?userId=${userId}&month=${month}`);
-            if (!res.ok) throw new Error('PDF生成に失敗');
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `報酬明細_${user?.name || userId}_${month}.pdf`;
-            a.click();
-            URL.revokeObjectURL(url);
-        } catch {
-            alert('PDF生成に失敗しました');
-        }
-        setDownloading(false);
-    };
 
     if (loading || !user) {
         return (
@@ -323,17 +305,18 @@ export default function AdminPayslipPage() {
                 </div>
             </div>
 
-            {/* PDF Download */}
-            <button
-                onClick={handleDownloadPDF}
-                disabled={downloading}
-                className="w-full py-4 px-6 rounded-2xl bg-slate-800 text-white font-bold hover:bg-slate-900 transition-all disabled:opacity-50 shadow-xl shadow-slate-200 flex items-center justify-center gap-3 active:scale-[0.98]"
+            {/* Printable Preview */}
+            <a
+                href={`/payslips/${userId}/${month}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-4 px-6 rounded-2xl bg-slate-800 text-white font-bold hover:bg-slate-900 transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-3 active:scale-[0.98]"
             >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                 </svg>
-                {downloading ? 'PDF生成中...' : '報酬明細をPDFで出力'}
-            </button>
+                報酬明細の印刷 プレビュー
+            </a>
         </div>
     );
 }
