@@ -31,7 +31,25 @@ export default function LoginPage() {
         }
 
         // ログイン成功
-        router.push('/employee/reports');
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+            const { data: userData } = await supabase
+                .from('users')
+                .select('role')
+                .eq('id', authUser.id)
+                .single();
+
+            if (userData?.role === 'leader') {
+                router.push('/leader/reports');
+            } else if (userData?.role === 'admin') {
+                router.push('/admin/reports');
+            } else {
+                router.push('/employee/reports');
+            }
+        } else {
+            router.push('/employee/reports');
+        }
+
         router.refresh();
     };
 
