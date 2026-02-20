@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
+import path from 'path';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -83,7 +84,6 @@ export async function GET(request: NextRequest) {
 <head>
     <meta charset="UTF-8">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
         body {
             font-family: 'Noto Sans JP', sans-serif;
             margin: 0;
@@ -262,8 +262,10 @@ export async function GET(request: NextRequest) {
         `;
 
         // 4. Puppeteer で PDF 生成
-        // Vercel環境での日本語フォント対応
-        await chromium.font('https://raw.githack.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSansJP/NotoSansJP-Regular.ttf');
+        // Vercel環境での日本語フォント対応（ローカル配置のフォントを使用）
+        await chromium.font(
+            path.join(process.cwd(), 'public/fonts/NotoSansJP-VariableFont_wght.ttf')
+        );
 
         const browser = await puppeteer.launch({
             args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
