@@ -272,15 +272,15 @@ export async function GET(request: NextRequest) {
 
         const browser = await puppeteer.launch({
             args: [
-                ...chromium.args,
+                ...(chromium as any).args,
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
             ],
-            defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
-            headless: chromium.headless as any,
+            defaultViewport: (chromium as any).defaultViewport,
+            executablePath: await (chromium as any).executablePath(),
+            headless: (chromium as any).headless as any,
         });
 
         const page = await browser.newPage();
