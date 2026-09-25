@@ -2,19 +2,28 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabaseClient';
-import { User, Company } from '@/lib/types'; // Assuming Company type is also in '@/lib/types'
+import { createClient } from '@/lib/supabase/client';
+import type { User as AuthUser } from '@supabase/supabase-js';
+import { User, Company, Role } from '@/lib/types'; // Assuming Company type is also in '@/lib/types'
+
+type UserRow = User & { companies?: Company | null };
+
+const errorMessage = (err: unknown) =>
+    err instanceof Error ? err.message : '予期しないエラーが発生しました';
+
+const supabase = createClient();
 
 export default function AdminUsersPage() {
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<AuthUser | null>(null);
     const [authLoading, setAuthLoading] = useState(true);
-    const [users, setUsers] = useState<(User & { companies?: { name: string } | null })[]>([]);
+    const [users, setUsers] = useState<UserRow[]>([]);
     const [companies, setCompanies] = useState<Company[]>([]);
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editRate, setEditRate] = useState<number>(0);
     const [editCompanyId, setEditCompanyId] = useState<string | null>(null);
+    const [editRole, setEditRole] = useState<Role>('employee');
     const [saving, setSaving] = useState(false);
 
     // 新規ユーザー用
@@ -75,7 +84,7 @@ export default function AdminUsersPage() {
             companies: compsList.find(c => c.id === u.company_id) || null
         }));
 
-        setUsers(mappedUsers as any);
+        setUsers(mappedUsers as UserRow[]);
         setCompanies(compsList);
         setLoading(false);
     };
@@ -104,35 +113,61 @@ export default function AdminUsersPage() {
             setNewRate(0);
             setNewCompanyId('');
             fetchData();
-        } catch (err: any) {
-            alert(err.message);
+        } catch (err) {
+            alert(errorMessage(err));
         } finally {
             setSaving(false);
         }
     };
 
-    const handleToggleActive = async (userId: string, currentStatus: boolean) => {
+    // 更新を実行し、失敗（通信エラー・RLS による拒否＝0件更新）を必ず画面に出す
+    const updateUser = async (userId: string, patch: Record<string, unknown>) => {
         setSaving(true);
-        await supabase
-            .from('users')
-            .update({ is_active: !currentStatus })
-            .eq('id', userId);
-        setSaving(false);
-        fetchData();
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .update(patch)
+                .eq('id', userId)
+                .select();
+
+            if (error) {
+                alert('更新に失敗しました: ' + error.message);
+                return false;
+            }
+            if (!data || data.length === 0) {
+                alert('更新できませんでした。管理者権限が無い可能性があります。');
+                return false;
+            }
+            return true;
+        } finally {
+            setSaving(false);
+            fetchData();
+        }
+    };
+
+    const handleToggleActive = async (userId: string, currentStatus: boolean) => {
+        if (userId === user?.id && currentStatus) {
+            alert('自分自身を無効化することはできません。');
+            return;
+        }
+        await updateUser(userId, { is_active: !currentStatus });
     };
 
     const handleSaveEdit = async (userId: string) => {
-        setSaving(true);
-        await supabase
-            .from('users')
-            .update({
-                hourly_rate_default: editRate,
-                company_id: editCompanyId || null
-            })
-            .eq('id', userId);
-        setEditingId(null);
-        setSaving(false);
-        fetchData();
+        if (!Number.isInteger(editRate) || editRate < 0) {
+            alert('時給は0以上の整数で入力してください');
+            return;
+        }
+        if (userId === user?.id && editRole !== 'admin') {
+            alert('自分自身の管理者権限を外すことはできません。');
+            return;
+        }
+        const ok = await updateUser(userId, {
+            hourly_rate_default: editRate,
+            company_id: editCompanyId || null,
+            role: editRole,
+        });
+        if (ok) setEditingId(null);
     };
 
     const handleResetPassword = async (userId: string) => {
@@ -153,8 +188,8 @@ export default function AdminUsersPage() {
             alert('パスワードを更新しました');
             setResettingId(null);
             setResetPassword('');
-        } catch (err: any) {
-            alert(err.message);
+        } catch (err) {
+            alert(errorMessage(err));
         } finally {
             setSaving(false);
         }
@@ -269,13 +304,14 @@ export default function AdminUsersPage() {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs text-slate-500 mb-1">所属法人</label>
+                                <label className="block text-xs text-slate-500 mb-1">所属法人（必須）</label>
                                 <select
                                     value={newCompanyId}
                                     onChange={(e) => setNewCompanyId(e.target.value)}
+                                    required
                                     className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
                                 >
-                                    <option value="">(未設定)</option>
+                                    <option value="">選択してください</option>
                                     {companies.map(c => (
                                         <option key={c.id} value={c.id}>{c.name}</option>
                                     ))}
@@ -354,12 +390,24 @@ export default function AdminUsersPage() {
                                         )}
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${u.role === 'admin' ? 'bg-orange-500/10 border-orange-500/20 text-orange-500' :
-                                            u.role === 'leader' ? 'bg-blue-500/10 border-blue-500/20 text-blue-500' :
-                                                'bg-slate-500/10 border-slate-500/20 text-slate-400'
-                                            }`}>
-                                            {u.role}
-                                        </span>
+                                        {editingId === u.id ? (
+                                            <select
+                                                value={editRole}
+                                                onChange={(e) => setEditRole(e.target.value as Role)}
+                                                className="w-full px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:ring-2 focus:ring-blue-500/20"
+                                            >
+                                                <option value="employee">従業員</option>
+                                                <option value="leader">リーダー</option>
+                                                <option value="admin">管理者</option>
+                                            </select>
+                                        ) : (
+                                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${u.role === 'admin' ? 'bg-orange-500/10 border-orange-500/20 text-orange-500' :
+                                                u.role === 'leader' ? 'bg-blue-500/10 border-blue-500/20 text-blue-500' :
+                                                    'bg-slate-500/10 border-slate-500/20 text-slate-400'
+                                                }`}>
+                                                {u.role}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4">
                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${u.is_active ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
@@ -420,6 +468,7 @@ export default function AdminUsersPage() {
                                                             setEditingId(u.id);
                                                             setEditRate(u.hourly_rate_default);
                                                             setEditCompanyId(u.company_id || null);
+                                                            setEditRole(u.role);
                                                         }}
                                                         title="編集"
                                                         className="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-blue-600 transition-all"

@@ -37,7 +37,7 @@ export default async function EmployeeLayout({ children }: { children: React.Rea
                     </div>
                     <div className="space-y-4">
                         <a href="/login" className="block text-sm text-slate-500 hover:text-blue-600 underline transition-colors">
-                            別のカウントでログイン
+                            別のアカウントでログイン
                         </a>
                     </div>
                 </div>
@@ -64,7 +64,7 @@ export default async function EmployeeLayout({ children }: { children: React.Rea
                     </div>
                     <div className="space-y-3">
                         <a href="/login" className="block w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all font-semibold text-sm text-slate-600">
-                            別のカウントでログイン
+                            別のアカウントでログイン
                         </a>
                     </div>
                 </div>

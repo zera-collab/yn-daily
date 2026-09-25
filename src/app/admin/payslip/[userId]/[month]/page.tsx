@@ -1,38 +1,38 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { User, DailyReport, Payslip, formatMinutes } from '@/lib/types';
+import { User, DailyReport, Payslip, formatMinutes, getMonthRange } from '@/lib/types';
+
+// ブラウザ用クライアントはモジュールスコープで1つだけ生成する
+// （毎レンダー作り直すと useEffect の依存が毎回変わってしまうため）
+const supabase = createClient();
 
 export default function AdminPayslipPage() {
     const params = useParams();
     const router = useRouter();
-    const supabase = createClient();
     const userId = params.userId as string;
     const month = params.month as string;
 
     const [user, setUser] = useState<User | null>(null);
     const [reports, setReports] = useState<DailyReport[]>([]);
     const [payslip, setPayslip] = useState<Payslip | null>(null);
-    const [dailyAdj, setDailyAdj] = useState<string>('');
     const [otherAdj, setOtherAdj] = useState<string>('');
     const [dailyPaidAmount, setDailyPaidAmount] = useState<string>('');
     const [hasMiscFee, setHasMiscFee] = useState(false);
     const [note, setNote] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    // 入力欄に DB の値を流し込むのは初回のみ（編集中の値を上書きしないため）
+    const initialized = useRef(false);
 
-    useEffect(() => { fetchData(); }, []);
-
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setLoading(true);
         const { data: userData } = await supabase.from('users').select('*').eq('id', userId).single();
         setUser(userData);
 
-        const startDate = `${month}-01`;
-        const [y, m] = month.split('-').map(Number);
-        const endDate = new Date(y, m, 0).toISOString().split('T')[0];
+        const { startDate, endDate } = getMonthRange(month);
 
         const { data: reportsData } = await supabase
             .from('daily_reports')
@@ -49,14 +49,14 @@ export default function AdminPayslipPage() {
             .select('*')
             .eq('user_id', userId)
             .eq('month', month)
-            .single();
+            .maybeSingle();
 
         if (payslipData) {
             setPayslip(payslipData);
             // ユーザーが編集中（または保存直後）に上書きされるのを防ぐため、
-            // 初回ロード時(loading===true)のみ DBの値をセットする
-            if (loading) {
-                setDailyAdj((payslipData.daily_pay_adjustment || 0).toString());
+            // 初回ロード時のみ DB の値を入力欄にセットする
+            if (!initialized.current) {
+                initialized.current = true;
                 setOtherAdj((payslipData.other_adjustment || 0).toString());
                 setDailyPaidAmount((payslipData.daily_paid_amount || 0).toString());
                 setHasMiscFee(payslipData.has_misc_fee || false);
@@ -65,7 +65,12 @@ export default function AdminPayslipPage() {
         }
 
         setLoading(false);
-    };
+    }, [userId, month]);
+
+    useEffect(() => {
+        const run = async () => { await fetchData(); };
+        run();
+    }, [fetchData]);
 
     const handleSavePayslip = async () => {
         setSaving(true);
@@ -73,14 +78,13 @@ export default function AdminPayslipPage() {
         if (!authUser) return;
 
         // String -> Number 変換。nullやundefinedも安全に処理する
-        const parseValue = (val: any) => {
+        const parseValue = (val: unknown) => {
             const trimmed = String(val || '').trim();
             if (trimmed === '') return 0;
             const parsed = parseInt(trimmed, 10);
             return isNaN(parsed) ? 0 : parsed;
         };
 
-        const finalDailyAdj = parseValue(dailyAdj);
         const finalOtherAdj = parseValue(otherAdj);
         const finalDailyPaid = parseValue(dailyPaidAmount);
 
@@ -88,7 +92,6 @@ export default function AdminPayslipPage() {
             const { error } = await supabase
                 .from('payslips')
                 .update({
-                    daily_pay_adjustment: finalDailyAdj,
                     other_adjustment: finalOtherAdj,
                     daily_paid_amount: finalDailyPaid,
                     has_misc_fee: hasMiscFee,
@@ -106,7 +109,6 @@ export default function AdminPayslipPage() {
             const { data: newPayslip, error } = await supabase.from('payslips').insert({
                 user_id: userId,
                 month,
-                daily_pay_adjustment: finalDailyAdj,
                 other_adjustment: finalOtherAdj,
                 daily_paid_amount: finalDailyPaid,
                 has_misc_fee: hasMiscFee,
@@ -144,15 +146,13 @@ export default function AdminPayslipPage() {
     }
 
     // Calculate totals
-    let totalMinutes = 0;
-    let totalPay = 0;
     const dailyDetails = reports.map((r) => {
         const rate = r.hourly_rate_override ?? user.hourly_rate_default;
         const pay = Math.round((r.work_minutes / 60) * rate);
-        totalMinutes += r.work_minutes;
-        totalPay += pay;
         return { ...r, rate, pay };
     });
+    const totalMinutes = dailyDetails.reduce((sum, d) => sum + d.work_minutes, 0);
+    const totalPay = dailyDetails.reduce((sum, d) => sum + d.pay, 0);
 
     // 【新計算ロジック】 
     const basePay = totalPay;

@@ -62,7 +62,7 @@ export default async function LeaderLayout({ children }: { children: React.React
                     </div>
                     <div className="space-y-3">
                         <a href="/login" className="block w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all font-semibold text-sm text-slate-600">
-                            別のカウントでログイン
+                            別のアカウントでログイン
                         </a>
                     </div>
                 </div>

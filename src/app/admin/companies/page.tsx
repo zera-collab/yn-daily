@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Company } from '@/lib/types';
 
+// ブラウザ用クライアントはモジュールスコープで1つだけ生成する
+// （毎レンダー作り直すと useEffect の依存が毎回変わってしまうため）
+const supabase = createClient();
+
 export default function AdminCompaniesPage() {
-    const supabase = createClient();
     const [companies, setCompanies] = useState<Company[]>([]);
     const [loading, setLoading] = useState(true);
     const [name, setName] = useState('');
@@ -13,36 +16,36 @@ export default function AdminCompaniesPage() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
-    const fetchCompanies = async () => {
+    const fetchCompanies = useCallback(async () => {
         setLoading(true);
         const { data } = await supabase.from('companies').select('*').order('created_at');
         setCompanies(data || []);
         setLoading(false);
-    };
+    }, []);
 
     useEffect(() => {
-        fetchCompanies();
-    }, []);
+        const run = async () => { await fetchCompanies(); };
+        run();
+    }, [fetchCompanies]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
 
-        if (editingId) {
-            await supabase
-                .from('companies')
-                .update({ name, address })
-                .eq('id', editingId);
-        } else {
-            await supabase
-                .from('companies')
-                .insert({ name, address });
+        const { error } = editingId
+            ? await supabase.from('companies').update({ name, address }).eq('id', editingId)
+            : await supabase.from('companies').insert({ name, address });
+
+        setSaving(false);
+
+        if (error) {
+            alert((editingId ? '更新' : '登録') + 'に失敗しました: ' + error.message);
+            return;
         }
 
         setName('');
         setAddress('');
         setEditingId(null);
-        setSaving(false);
         fetchCompanies();
     };
 
@@ -54,7 +57,28 @@ export default function AdminCompaniesPage() {
 
     const handleDelete = async (id: string) => {
         if (!confirm('この法人を削除しますか？')) return;
-        await supabase.from('companies').delete().eq('id', id);
+
+        // この法人に所属しているユーザーがいると外部キー制約で必ず失敗するため、
+        // 生の制約違反エラーではなく分かりやすいメッセージを出す
+        const { count, error: countError } = await supabase
+            .from('users')
+            .select('id', { count: 'exact', head: true })
+            .eq('company_id', id);
+
+        if (countError) {
+            alert('削除前の確認に失敗しました: ' + countError.message);
+            return;
+        }
+        if (count && count > 0) {
+            alert(`この法人には ${count} 名のユーザーが所属しているため削除できません。\n先に所属を変更してください。`);
+            return;
+        }
+
+        const { error } = await supabase.from('companies').delete().eq('id', id);
+        if (error) {
+            alert('削除に失敗しました: ' + error.message);
+            return;
+        }
         fetchCompanies();
     };
 

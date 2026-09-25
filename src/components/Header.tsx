@@ -117,6 +117,7 @@ function getNavItems(role: Role) {
     }
     if (role === 'admin') {
         items.push({ href: '/admin/users', label: 'ユーザー管理' });
+        items.push({ href: '/admin/companies', label: '法人マスタ' });
         items.push({ href: '/admin/reports', label: '日報・時給' });
         items.push({ href: '/admin/payroll', label: '月次集計' });
     }

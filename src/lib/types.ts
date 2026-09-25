@@ -40,6 +40,7 @@ export interface Payslip {
     id: string;
     user_id: string;
     month: string;
+    /** @deprecated 保存されるだけで支給額の計算には一切使われていない。調整は other_adjustment を使うこと。 */
     daily_pay_adjustment: number;
     other_adjustment: number;
     daily_paid_amount: number; // 日払い
@@ -87,10 +88,11 @@ export function calculateWorkMinutes(
 ): number {
     const [sh, sm] = startTime.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
-    let startTotal = sh * 60 + sm;
+    const startTotal = sh * 60 + sm;
     let endTotal = eh * 60 + em;
-    // 日跨ぎ: end < start の場合は翌日とみなす
-    if (endTotal <= startTotal) {
+    // 日跨ぎ: end < start の場合のみ翌日とみなす
+    // （end === start は 24時間勤務ではなく実働0分として扱う）
+    if (endTotal < startTotal) {
         endTotal += 24 * 60;
     }
     return Math.max(0, endTotal - startTotal - breakMinutes);
@@ -103,4 +105,30 @@ export function formatMinutes(minutes: number): string {
     if (h === 0) return `${m}分`;
     if (m === 0) return `${h}時間`;
     return `${h}時間${m}分`;
+}
+
+/**
+ * "YYYY-MM" から、その月の初日・末日を "YYYY-MM-DD" で返す。
+ *
+ * new Date(y, m, 0).toISOString() はローカル時刻の月末0時を UTC に変換するため、
+ * JST（UTC+9）では前日の日付になり、月末日の日報が集計から漏れていた。
+ * ここでは UTC 上で日付計算を行い、タイムゾーンに依存しないようにする。
+ */
+export function getMonthRange(month: string): { startDate: string; endDate: string } {
+    const [y, m] = month.split('-').map(Number);
+    // Date.UTC(y, m, 0) は「m月の0日目」= m月の前月（= 指定月）の末日
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return {
+        startDate: `${month}-01`,
+        endDate: `${month}-${String(lastDay).padStart(2, '0')}`,
+    };
+}
+
+/**
+ * 実行環境のローカルタイムゾーンでの「今日」を "YYYY-MM-DD" で返す。
+ * new Date().toISOString() だと JST の朝9時前に前日の日付になってしまう。
+ */
+export function getTodayLocal(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }

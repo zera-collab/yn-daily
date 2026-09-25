@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ success: true });
 
-    } catch (err: any) {
+    } catch (err) {
         console.error('System error:', err);
         return NextResponse.json({ error: 'システムエラーが発生しました' }, { status: 500 });
     }

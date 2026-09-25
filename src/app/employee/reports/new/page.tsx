@@ -3,10 +3,15 @@
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import ReportForm from '@/components/ReportForm';
+import { calculateWorkMinutes } from '@/lib/types';
+import { assertNoDuplicateReport } from '@/lib/reports';
+
+// ブラウザ用クライアントはモジュールスコープで1つだけ生成する
+// （毎レンダー作り直すと useEffect の依存が毎回変わってしまうため）
+const supabase = createClient();
 
 export default function NewReportPage() {
     const router = useRouter();
-    const supabase = createClient();
 
     const handleSubmit = async (data: {
         work_date: string;
@@ -32,35 +37,15 @@ export default function NewReportPage() {
             console.warn('Warning: Non-employee submitting report');
         }
 
-        // 3) work_minutes の再計算（自動計算ロジック）
-        // クライアント側計算値も受け取っているが、念のため再計算
-        const startParts = data.start_time.split(':').map(Number);
-        const endParts = data.end_time.split(':').map(Number);
-        let startTotal = startParts[0] * 60 + startParts[1];
-        let endTotal = endParts[0] * 60 + endParts[1];
-
-        // 日跨ぎ: end < start の場合は翌日とみなす
-        if (endTotal <= startTotal) {
-            endTotal += 24 * 60;
-        }
-        const calculatedWorkMinutes = Math.max(0, endTotal - startTotal - data.break_minutes);
+        // 3) work_minutes の再計算（共通ロジックを使用。DB トリガーでも再計算される）
+        const calculatedWorkMinutes = calculateWorkMinutes(
+            data.start_time,
+            data.end_time,
+            data.break_minutes
+        );
 
         // 4) 同一日付の日報が既に存在するかチェック
-        const { data: existingReport, error: checkError } = await supabase
-            .from('daily_reports')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('work_date', data.work_date)
-            .single();
-
-        if (checkError && checkError.code !== 'PGRST116') {
-            // PGRST116 は「見つからない」エラーなので、それ以外のエラーの場合はスロー
-            throw new Error('日報の重複チェック中にエラーが発生しました');
-        }
-
-        if (existingReport) {
-            throw new Error(`エラー: ${data.work_date} の日報は既に提出されています。`);
-        }
+        await assertNoDuplicateReport(supabase, user.id, data.work_date);
 
         const { error } = await supabase.from('daily_reports').insert({
             user_id: user.id,

@@ -5,12 +5,16 @@ import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import ReportForm from '@/components/ReportForm';
 import StatusBadge from '@/components/StatusBadge';
-import { DailyReport, formatMinutes } from '@/lib/types';
+import { DailyReport, formatMinutes, calculateWorkMinutes } from '@/lib/types';
+import { assertNoDuplicateReport } from '@/lib/reports';
+
+// ブラウザ用クライアントはモジュールスコープで1つだけ生成する
+// （毎レンダー作り直すと useEffect の依存が毎回変わってしまうため）
+const supabase = createClient();
 
 export default function ReportDetailPage() {
     const router = useRouter();
     const params = useParams();
-    const supabase = createClient();
     const [report, setReport] = useState<DailyReport | null>(null);
     const [loading, setLoading] = useState(true);
     const [requesting, setRequesting] = useState(false);
@@ -36,15 +40,33 @@ export default function ReportDetailPage() {
         work_minutes: number;
         content: string;
     }) => {
-        const { error } = await supabase
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('認証エラー');
+
+        // 勤務日を別の日に変更した場合に重複しないかチェック（自分自身は除外）
+        await assertNoDuplicateReport(supabase, user.id, data.work_date, String(params.id));
+
+        // 新規作成と同じく work_minutes は受け取った値をそのまま使わず再計算する
+        const calculatedWorkMinutes = calculateWorkMinutes(
+            data.start_time,
+            data.end_time,
+            data.break_minutes
+        );
+
+        const { data: updated, error } = await supabase
             .from('daily_reports')
             .update({
                 ...data,
+                work_minutes: calculatedWorkMinutes,
                 status: 'submitted',
             })
-            .eq('id', params.id);
+            .eq('id', params.id)
+            .select();
 
         if (error) throw new Error(error.message);
+        if (!updated || updated.length === 0) {
+            throw new Error('更新できませんでした。この日報は編集できない状態になっている可能性があります。');
+        }
 
         router.push('/employee/reports');
         router.refresh();
@@ -53,15 +75,21 @@ export default function ReportDetailPage() {
     const handleRequestRevision = async () => {
         if (!confirm('この日報の差し戻し（修正可能状態への変更）を管理者に依頼しますか？')) return;
         setRequesting(true);
-        const { error } = await supabase
+        const { data: updated, error } = await supabase
             .from('daily_reports')
             .update({
                 status: 'revision_requested',
             })
-            .eq('id', params.id);
+            .eq('id', params.id)
+            .select();
 
         if (error) {
-            alert('依頼に失敗しました');
+            alert('依頼に失敗しました: ' + error.message);
+            setRequesting(false);
+            return;
+        }
+        if (!updated || updated.length === 0) {
+            alert('依頼できませんでした。すでに差し戻し済みか、権限が無い可能性があります。');
             setRequesting(false);
             return;
         }

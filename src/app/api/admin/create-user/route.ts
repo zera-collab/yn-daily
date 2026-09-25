@@ -27,7 +27,23 @@ export async function POST(request: Request) {
         const { employee_code, name, role, hourly_rate_default, company_id } = await request.json();
 
         if (!employee_code || !name || !role || !company_id) {
-            return NextResponse.json({ error: '必須項目が不足しています' }, { status: 400 });
+            return NextResponse.json({ error: '社員コード・氏名・権限・所属法人はすべて必須です' }, { status: 400 });
+        }
+
+        // 社員コードはメールアドレスのローカル部として使うため文字種を制限する
+        if (!/^[A-Za-z0-9._-]{1,64}$/.test(employee_code)) {
+            return NextResponse.json({
+                error: '社員コードは半角英数字と . _ - のみ使用できます',
+            }, { status: 400 });
+        }
+
+        if (!['employee', 'leader', 'admin'].includes(role)) {
+            return NextResponse.json({ error: '権限の指定が不正です' }, { status: 400 });
+        }
+
+        const rate = Number(hourly_rate_default ?? 0);
+        if (!Number.isInteger(rate) || rate < 0) {
+            return NextResponse.json({ error: '時給は0以上の整数で入力してください' }, { status: 400 });
         }
 
         // 3. パスワード生成
@@ -57,14 +73,23 @@ export async function POST(request: Request) {
                 employee_code,
                 name,
                 role,
-                hourly_rate_default: hourly_rate_default || 0,
+                hourly_rate_default: rate,
                 is_active: true,
                 company_id
             });
 
         if (dbError) {
             console.error('DB insertion error:', dbError);
-            // AuthだけできてDB失敗した場合は、不整合を防ぐためAuth側を消す検討も必要だが、まずはログ
+            // Auth だけ作成されて DB 登録に失敗すると、孤立したアカウントが残り
+            // その社員コード（= メールアドレス）が二度と使えなくなる。
+            // ロールバックとして Auth 側も削除する。
+            const { error: cleanupError } = await adminClient.auth.admin.deleteUser(authUser.user.id);
+            if (cleanupError) {
+                console.error('Rollback (auth user delete) failed:', cleanupError);
+                return NextResponse.json({
+                    error: `DB登録に失敗し、認証ユーザーの取り消しにも失敗しました。管理者に連絡してください（ID: ${authUser.user.id}）`,
+                }, { status: 500 });
+            }
             return NextResponse.json({ error: `DB登録失敗: ${dbError.message}` }, { status: 500 });
         }
 
@@ -74,7 +99,7 @@ export async function POST(request: Request) {
             password: password // 初期パスワードを1回だけ返す
         });
 
-    } catch (err: any) {
+    } catch (err) {
         console.error('System error:', err);
         return NextResponse.json({ error: 'システムエラーが発生しました' }, { status: 500 });
     }

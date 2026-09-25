@@ -4,11 +4,14 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import StatusBadge from '@/components/StatusBadge';
-import { formatMinutes, DailyReport } from '@/lib/types';
+import { formatMinutes, DailyReport, getMonthRange } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 
+// ブラウザ用クライアントはモジュールスコープで1つだけ生成する
+// （毎レンダー作り直すと useEffect の依存が毎回変わってしまうため）
+const supabase = createClient();
+
 export default function EmployeeReportsPage() {
-    const supabase = createClient();
     const router = useRouter();
     const [reports, setReports] = useState<DailyReport[]>([]);
     const [loading, setLoading] = useState(true);
@@ -29,10 +32,7 @@ export default function EmployeeReportsPage() {
             .eq('user_id', user.id);
 
         if (filterMonth) {
-            const startDate = `${filterMonth}-01`;
-            const y = parseInt(filterMonth.split('-')[0], 10);
-            const m = parseInt(filterMonth.split('-')[1], 10);
-            const endDate = new Date(y, m, 0).toISOString().split('T')[0];
+            const { startDate, endDate } = getMonthRange(filterMonth);
             query = query.gte('work_date', startDate).lte('work_date', endDate);
         }
 
