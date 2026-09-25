@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import PayslipView, { PayslipData } from "@/components/PayslipView";
-import { notFound } from "next/navigation";
+import { getMonthRange } from "@/lib/types";
+import { notFound, redirect } from "next/navigation";
 
 export default async function PrintablePayslipPage({
     params,
@@ -8,6 +10,27 @@ export default async function PrintablePayslipPage({
     params: Promise<{ userId: string; month: string }>;
 }) {
     const { userId, month } = await params;
+
+    // "YYYY-MM" 以外は受け付けない
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) notFound();
+
+    // ---- 認可チェック ----
+    // このページは RLS を迂回する service role でデータを取得するため、
+    // 閲覧してよいのが「管理者」または「本人」だけであることをここで必ず確認する。
+    const authClient = await createClient();
+    const { data: { user: currentUser } } = await authClient.auth.getUser();
+    if (!currentUser) redirect("/login");
+
+    const { data: currentUserData } = await authClient
+        .from("users")
+        .select("role")
+        .eq("id", currentUser.id)
+        .single();
+
+    const isAdmin = currentUserData?.role === "admin";
+    const isSelf = currentUser.id === userId;
+    if (!isAdmin && !isSelf) notFound();
+
     const supabase = createAdminClient();
 
     // 1. Data Fetching
@@ -19,9 +42,7 @@ export default async function PrintablePayslipPage({
 
     if (userError || !user) notFound();
 
-    const startDate = `${month}-01`;
-    const [y, m] = month.split("-").map(Number);
-    const endDate = new Date(y, m, 0).toISOString().split("T")[0];
+    const { startDate, endDate } = getMonthRange(month);
 
     const { data: reports } = await supabase
         .from("daily_reports")
@@ -37,7 +58,7 @@ export default async function PrintablePayslipPage({
         .select("*")
         .eq("user_id", userId)
         .eq("month", month)
-        .single();
+        .maybeSingle();
 
     // 2. Calculation (Sync with existing logic)
     let totalBasePay = 0;

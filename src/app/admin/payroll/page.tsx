@@ -1,13 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { User, DailyReport, Payslip, formatMinutes } from '@/lib/types';
+import { User, DailyReport, Payslip, formatMinutes, getMonthRange } from '@/lib/types';
+
+// ブラウザ用クライアントはモジュールスコープで1つだけ生成する
+// （毎レンダー作り直すと useEffect の依存が毎回変わってしまうため）
+const supabase = createClient();
 
 export default function AdminPayrollPage() {
-    const supabase = createClient();
     const searchParams = useSearchParams();
     const router = useRouter();
     const now = new Date();
@@ -18,20 +21,14 @@ export default function AdminPayrollPage() {
     const [payslips, setPayslips] = useState<Record<string, Payslip>>({});
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        fetchData();
-    }, [month]);
-
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setLoading(true);
         // Users
         const { data: usersData } = await supabase.from('users').select('*').order('name');
         setUsers(usersData || []);
 
         // Approved reports for month
-        const startDate = `${month}-01`;
-        const [y, m] = month.split('-').map(Number);
-        const endDate = new Date(y, m, 0).toISOString().split('T')[0];
+        const { startDate, endDate } = getMonthRange(month);
 
         const { data: reportsData } = await supabase
             .from('daily_reports')
@@ -61,7 +58,12 @@ export default function AdminPayrollPage() {
         setPayslips(payslipMap);
 
         setLoading(false);
-    };
+    }, [month]);
+
+    useEffect(() => {
+        const run = async () => { await fetchData(); };
+        run();
+    }, [fetchData]);
 
     const calculateUserPay = (user: User, reports: DailyReport[]) => {
         let totalMinutes = 0;

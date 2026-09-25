@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { TIME_OPTIONS, BREAK_OPTIONS, calculateWorkMinutes, formatMinutes } from '@/lib/types';
+import { TIME_OPTIONS, BREAK_OPTIONS, calculateWorkMinutes, formatMinutes, getTodayLocal } from '@/lib/types';
 
 interface ReportFormProps {
     initialData?: {
@@ -24,7 +24,7 @@ interface ReportFormProps {
 }
 
 export default function ReportForm({ initialData, onSubmit, disabled, submitLabel = '保存' }: ReportFormProps) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayLocal();
     const [workDate, setWorkDate] = useState(initialData?.work_date || today);
     const [startTime, setStartTime] = useState(initialData?.start_time || '09:00');
     const [endTime, setEndTime] = useState(initialData?.end_time || '18:00');
@@ -123,7 +123,7 @@ export default function ReportForm({ initialData, onSubmit, disabled, submitLabe
                     <span className="text-sm text-blue-600">実働時間</span>
                     <span className="text-lg font-bold text-blue-700">{formatMinutes(workMinutes)}</span>
                 </div>
-                {endTime <= startTime && startTime !== endTime && (
+                {endTime < startTime && (
                     <p className="text-xs text-blue-600/70 mt-1">※ 日跨ぎ（翌日終了）として計算しています</p>
                 )}
             </div>

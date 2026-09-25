@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import Header from '@/components/Header';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -34,24 +35,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                         </p>
                     </div>
 
-                    <div className="bg-slate-50 p-4 rounded-xl text-left space-y-2 overflow-auto max-h-64 border border-slate-200">
-                        <p className="text-xs font-bold text-orange-600 uppercase tracking-wider">Debug Info</p>
-                        <pre className="text-[10px] font-mono text-slate-600">
-                            {JSON.stringify({
-                                userId: user.id,
-                                role: userData?.role,
-                                dbError: dbError,
-                                hasData: !!userData
-                            }, null, 2)}
-                        </pre>
-                    </div>
-
                     <div className="space-y-3">
-                        <a href="/" className="block w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all font-semibold text-sm text-slate-600">
+                        <Link href="/" className="block w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all font-semibold text-sm text-slate-600">
                             ホームに戻る
-                        </a>
+                        </Link>
                         <a href="/login" className="block text-xs text-slate-500 hover:text-blue-600 underline transition-colors">
-                            別のカウントでログイン
+                            別のアカウントでログイン
                         </a>
                     </div>
                 </div>
@@ -77,7 +66,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                     </div>
                     <div className="space-y-3">
                         <a href="/login" className="block w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all font-semibold text-sm text-slate-600">
-                            別のカウントでログイン
+                            別のアカウントでログイン
                         </a>
                     </div>
                 </div>

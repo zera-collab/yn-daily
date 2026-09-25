@@ -6,10 +6,13 @@ import { createClient } from '@/lib/supabase/client';
 import StatusBadge from '@/components/StatusBadge';
 import { DailyReport, User, formatMinutes } from '@/lib/types';
 
+// ブラウザ用クライアントはモジュールスコープで1つだけ生成する
+// （毎レンダー作り直すと useEffect の依存が毎回変わってしまうため）
+const supabase = createClient();
+
 export default function LeaderReportDetailPage() {
     const router = useRouter();
     const params = useParams();
-    const supabase = createClient();
     const [report, setReport] = useState<DailyReport & { user: User } | null>(null);
     const [loading, setLoading] = useState(true);
     const [rejectReason, setRejectReason] = useState('');
@@ -29,62 +32,69 @@ export default function LeaderReportDetailPage() {
         fetchReport();
     }, [params.id]);
 
-    const handleApprove = async () => {
+    // 更新を実行し、失敗（通信エラー・RLS による拒否＝0件更新）を必ず画面に出す
+    const applyUpdate = async (patch: Record<string, unknown>) => {
         setProcessing(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                router.push('/login');
+                return;
+            }
+
+            const { data, error } = await supabase
+                .from('daily_reports')
+                .update(patch)
+                .eq('id', params.id)
+                .select();
+
+            if (error) {
+                alert('更新に失敗しました: ' + error.message);
+                return;
+            }
+            if (!data || data.length === 0) {
+                alert('更新できませんでした。権限が無いか、日報が削除された可能性があります。');
+                return;
+            }
+
+            router.push('/leader/reports');
+            router.refresh();
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleApprove = async () => {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        await supabase
-            .from('daily_reports')
-            .update({
-                status: 'approved',
-                approved_by: user.id,
-                approved_at: new Date().toISOString(),
-                reject_reason: null,
-            })
-            .eq('id', params.id);
-
-        router.push('/leader/reports');
-        router.refresh();
+        if (!user) {
+            router.push('/login');
+            return;
+        }
+        await applyUpdate({
+            status: 'approved',
+            approved_by: user.id,
+            approved_at: new Date().toISOString(),
+            reject_reason: null,
+        });
     };
 
     const handleReject = async () => {
         if (!rejectReason.trim()) return;
-        setProcessing(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        await supabase
-            .from('daily_reports')
-            .update({
-                status: 'rejected',
-                approved_by: null,
-                approved_at: null,
-                reject_reason: rejectReason.trim(),
-            })
-            .eq('id', params.id);
-
-        router.push('/leader/reports');
-        router.refresh();
+        await applyUpdate({
+            status: 'rejected',
+            approved_by: null,
+            approved_at: null,
+            reject_reason: rejectReason.trim(),
+        });
     };
 
     const handleAllowRevision = async () => {
-        setProcessing(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        await supabase
-            .from('daily_reports')
-            .update({
-                status: 'rejected',
-                approved_by: null,
-                approved_at: null,
-                reject_reason: '修正依頼に基づき、再編集を許可しました。',
-            })
-            .eq('id', params.id);
-
-        router.push('/leader/reports');
-        router.refresh();
+        await applyUpdate({
+            status: 'rejected',
+            approved_by: null,
+            approved_at: null,
+            reject_reason: '修正依頼に基づき、再編集を許可しました。',
+        });
     };
 
     if (loading) {
