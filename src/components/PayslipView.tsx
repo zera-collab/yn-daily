@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 type PayslipLine = { label: string; value: number };
 
 export type PayslipData = {
@@ -11,6 +13,8 @@ export type PayslipData = {
     netLabel: string;
     netValue: number;
     note?: string;
+    /** ブラウザの「印刷 / PDFに保存」で初期ファイル名として使われる */
+    documentTitle?: string;
 };
 
 const yen = (n: number) => {
@@ -20,6 +24,15 @@ const yen = (n: number) => {
 };
 
 export default function PayslipView({ data }: { data: PayslipData }) {
+    // ブラウザのPDF保存ダイアログは document.title を初期ファイル名にするため、
+    // ルートレイアウトの「日報管理システム」ではなく明細ごとの名前を入れる
+    useEffect(() => {
+        if (!data.documentTitle) return;
+        const previous = document.title;
+        document.title = data.documentTitle;
+        return () => { document.title = previous; };
+    }, [data.documentTitle]);
+
     return (
         <div className="pageWrap">
             <div className="toolbar noPrint">

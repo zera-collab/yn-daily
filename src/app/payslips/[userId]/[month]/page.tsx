@@ -74,7 +74,15 @@ export default async function PrintablePayslipPage({
     const dailyPaid = payslip?.daily_paid_amount || 0;
     const finalPay = subtotal - miscFee - dailyPaid;
 
+    // PDF保存時の初期ファイル名になる（例: 山田太郎_2026年2月報酬明細.pdf）
+    // 年を入れないと翌年の同じ月とファイル名が衝突するため年から入れる。
+    // ファイル名に使えない文字は下線に置き換える
+    const [yearNumber, monthNumber] = month.split("-").map(Number);
+    const safeName = user.name.replace(/[\\/:*?"<>|]/g, "_").trim();
+    const documentTitle = `${safeName}_${yearNumber}年${monthNumber}月報酬明細`;
+
     const data: PayslipData = {
+        documentTitle,
         monthLabel: `${month.replace("-", "年")}月分`,
         payerName: user.companies?.name || "(法人未設定)",
         payerAddress: user.companies?.address || "",
