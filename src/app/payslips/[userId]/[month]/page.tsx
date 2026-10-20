@@ -1,25 +1,24 @@
+import { cache } from "react";
+import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import PayslipView, { PayslipData } from "@/components/PayslipView";
 import { getMonthRange } from "@/lib/types";
 import { notFound, redirect } from "next/navigation";
 
-export default async function PrintablePayslipPage({
-    params,
-}: {
-    params: Promise<{ userId: string; month: string }>;
-}) {
-    const { userId, month } = await params;
+const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
-    // "YYYY-MM" 以外は受け付けない
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) notFound();
-
-    // ---- 認可チェック ----
+/**
+ * 認可チェックと対象ユーザーの取得。
+ * generateMetadata と本体の両方から呼ぶため react の cache() で
+ * 1リクエスト内の重複クエリを防ぐ。
+ */
+const loadPayslipUser = cache(async (userId: string) => {
     // このページは RLS を迂回する service role でデータを取得するため、
     // 閲覧してよいのが「管理者」または「本人」だけであることをここで必ず確認する。
     const authClient = await createClient();
     const { data: { user: currentUser } } = await authClient.auth.getUser();
-    if (!currentUser) redirect("/login");
+    if (!currentUser) return { status: "unauthenticated" as const };
 
     const { data: currentUserData } = await authClient
         .from("users")
@@ -29,18 +28,60 @@ export default async function PrintablePayslipPage({
 
     const isAdmin = currentUserData?.role === "admin";
     const isSelf = currentUser.id === userId;
-    if (!isAdmin && !isSelf) notFound();
+    if (!isAdmin && !isSelf) return { status: "forbidden" as const };
 
-    const supabase = createAdminClient();
-
-    // 1. Data Fetching
-    const { data: user, error: userError } = await supabase
+    const { data: user, error } = await createAdminClient()
         .from("users")
         .select("*, companies(*)")
         .eq("id", userId)
         .single();
 
-    if (userError || !user) notFound();
+    if (error || !user) return { status: "forbidden" as const };
+    return { status: "ok" as const, user };
+});
+
+/** PDF保存時の初期ファイル名になる（例: 山田太郎_2026年2月報酬明細.pdf） */
+function buildDocumentTitle(name: string, month: string) {
+    const [year, monthNumber] = month.split("-").map(Number);
+    // ファイル名に使えない文字は下線に置き換える
+    const safeName = name.replace(/[\\/:*?"<>|]/g, "_").trim();
+    return `${safeName}_${year}年${monthNumber}月報酬明細`;
+}
+
+// ブラウザの「印刷 / PDFに保存」は document.title を初期ファイル名に使う。
+// クライアント側で書き換えても Next.js のメタデータが後から上書きしてしまうため、
+// ここでサーバー側のタイトルそのものを差し替える。
+export async function generateMetadata({
+    params,
+}: {
+    params: Promise<{ userId: string; month: string }>;
+}): Promise<Metadata> {
+    const { userId, month } = await params;
+    if (!MONTH_PATTERN.test(month)) return {};
+
+    const result = await loadPayslipUser(userId);
+    // 権限が無い場合は氏名を漏らさないため既定のタイトルのままにする
+    if (result.status !== "ok") return {};
+
+    return { title: buildDocumentTitle(result.user.name, month) };
+}
+
+export default async function PrintablePayslipPage({
+    params,
+}: {
+    params: Promise<{ userId: string; month: string }>;
+}) {
+    const { userId, month } = await params;
+
+    // "YYYY-MM" 以外は受け付けない
+    if (!MONTH_PATTERN.test(month)) notFound();
+
+    const access = await loadPayslipUser(userId);
+    if (access.status === "unauthenticated") redirect("/login");
+    if (access.status !== "ok") notFound();
+    const user = access.user;
+
+    const supabase = createAdminClient();
 
     const { startDate, endDate } = getMonthRange(month);
 
@@ -74,15 +115,10 @@ export default async function PrintablePayslipPage({
     const dailyPaid = payslip?.daily_paid_amount || 0;
     const finalPay = subtotal - miscFee - dailyPaid;
 
-    // PDF保存時の初期ファイル名になる（例: 山田太郎_2026年2月報酬明細.pdf）
-    // 年を入れないと翌年の同じ月とファイル名が衝突するため年から入れる。
-    // ファイル名に使えない文字は下線に置き換える
-    const [yearNumber, monthNumber] = month.split("-").map(Number);
-    const safeName = user.name.replace(/[\\/:*?"<>|]/g, "_").trim();
-    const documentTitle = `${safeName}_${yearNumber}年${monthNumber}月報酬明細`;
-
+    // generateMetadata と同じタイトル。メタデータの反映が遅れた場合の保険として
+    // クライアント側でも document.title を設定する
     const data: PayslipData = {
-        documentTitle,
+        documentTitle: buildDocumentTitle(user.name, month),
         monthLabel: `${month.replace("-", "年")}月分`,
         payerName: user.companies?.name || "(法人未設定)",
         payerAddress: user.companies?.address || "",
