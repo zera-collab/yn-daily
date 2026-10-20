@@ -143,7 +143,17 @@ export default function AdminPayrollPage() {
                                                         {user.name.charAt(0)}
                                                     </div>
                                                     <div>
-                                                        <p className="text-sm font-semibold text-slate-800">{user.name}</p>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <p className="text-sm font-semibold text-slate-800">{user.name}</p>
+                                                            {!payslips[user.id] && (
+                                                                <span
+                                                                    title="この月の明細がまだ保存されていません。雑費などの調整は反映されていません。"
+                                                                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600"
+                                                                >
+                                                                    未保存
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <p className="text-xs text-slate-500">¥{user.hourly_rate_default.toLocaleString()}/h</p>
                                                     </div>
                                                 </div>

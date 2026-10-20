@@ -124,6 +124,19 @@ export function getMonthRange(month: string): { startDate: string; endDate: stri
     };
 }
 
+/** "YYYY-MM" の前月を "YYYY-MM" で返す（年またぎ対応） */
+export function getPreviousMonth(month: string): string {
+    const [y, m] = month.split('-').map(Number);
+    const d = new Date(Date.UTC(y, m - 2, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/** "YYYY-MM" を「2026年9月」形式の表示用文字列にする */
+export function formatMonthLabel(month: string): string {
+    const [y, m] = month.split('-').map(Number);
+    return `${y}年${m}月`;
+}
+
 /**
  * 実行環境のローカルタイムゾーンでの「今日」を "YYYY-MM-DD" で返す。
  * new Date().toISOString() だと JST の朝9時前に前日の日付になってしまう。

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { User, DailyReport, Payslip, formatMinutes, getMonthRange } from '@/lib/types';
+import { User, DailyReport, Payslip, formatMinutes, getMonthRange, getPreviousMonth, formatMonthLabel } from '@/lib/types';
 
 // ブラウザ用クライアントはモジュールスコープで1つだけ生成する
 // （毎レンダー作り直すと useEffect の依存が毎回変わってしまうため）
@@ -20,7 +20,9 @@ export default function AdminPayslipPage() {
     const [payslip, setPayslip] = useState<Payslip | null>(null);
     const [otherAdj, setOtherAdj] = useState<string>('');
     const [dailyPaidAmount, setDailyPaidAmount] = useState<string>('');
-    const [hasMiscFee, setHasMiscFee] = useState(false);
+    const [hasMiscFee, setHasMiscFee] = useState(true);
+    // 雑費の設定を前月から引き継いだ場合、その月（"YYYY-MM"）
+    const [carriedOverFrom, setCarriedOverFrom] = useState<string | null>(null);
     const [note, setNote] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -51,16 +53,37 @@ export default function AdminPayslipPage() {
             .eq('month', month)
             .maybeSingle();
 
-        if (payslipData) {
-            setPayslip(payslipData);
-            // ユーザーが編集中（または保存直後）に上書きされるのを防ぐため、
-            // 初回ロード時のみ DB の値を入力欄にセットする
-            if (!initialized.current) {
-                initialized.current = true;
+        if (payslipData) setPayslip(payslipData);
+
+        // ユーザーが編集中（または保存直後）に上書きされるのを防ぐため、
+        // 初回ロード時のみ入力欄に初期値をセットする
+        if (!initialized.current) {
+            initialized.current = true;
+
+            if (payslipData) {
                 setOtherAdj((payslipData.other_adjustment || 0).toString());
                 setDailyPaidAmount((payslipData.daily_paid_amount || 0).toString());
-                setHasMiscFee(payslipData.has_misc_fee || false);
+                setHasMiscFee(payslipData.has_misc_fee);
                 setNote(payslipData.note || '');
+            } else {
+                // この月はまだ未保存。雑費の設定だけ前月から引き継ぐ。
+                // 調整費・日払いはその月固有の金額なので引き継がない。
+                const previous = getPreviousMonth(month);
+                const { data: previousPayslip } = await supabase
+                    .from('payslips')
+                    .select('has_misc_fee')
+                    .eq('user_id', userId)
+                    .eq('month', previous)
+                    .maybeSingle();
+
+                if (previousPayslip) {
+                    setHasMiscFee(previousPayslip.has_misc_fee);
+                    setCarriedOverFrom(previous);
+                } else {
+                    // 前月も無ければ既定でON
+                    setHasMiscFee(true);
+                    setCarriedOverFrom(null);
+                }
             }
         }
 
@@ -221,6 +244,19 @@ export default function AdminPayslipPage() {
             {/* Adjustments */}
             <div className="glass rounded-2xl p-5 mb-6 border border-slate-200 shadow-sm">
                 <h2 className="text-sm font-bold text-slate-800 mb-4">調整項目</h2>
+
+                {!payslip && (
+                    <div className="mb-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                        <p className="font-semibold">この月はまだ保存されていません</p>
+                        <p className="mt-1 text-xs leading-relaxed">
+                            {carriedOverFrom
+                                ? `雑費の設定を前月（${formatMonthLabel(carriedOverFrom)}）から引き継いで表示しています。`
+                                : '雑費は既定の「適用あり」で表示しています。'}
+                            <br />
+                            「調整を保存」を押すまで<strong>月次集計には反映されません</strong>。
+                        </p>
+                    </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                     <div>
                         <label className="block text-xs text-slate-500 mb-1">調整費 (±)</label>
